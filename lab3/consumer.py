@@ -9,7 +9,7 @@ conf = {'bootstrap.servers': 'localhost:9092',
 consumer = Consumer(conf)
 
 # %%
-topic='timer'
+topic='books'
 consumer.subscribe([topic])
 
 # %%
