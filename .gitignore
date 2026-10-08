@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Project data
+projet/data/raw/*
+projet/data/processed/*
+!projet/data/raw/.gitkeep
+!projet/data/processed/.gitkeep
+# macOS
+.DS_Store
+
+
