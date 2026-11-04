@@ -21,3 +21,5 @@ projet/data/processed/*
 .DS_Store
 
 
+data/
+output/
