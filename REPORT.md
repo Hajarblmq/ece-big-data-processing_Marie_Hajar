@@ -401,3 +401,56 @@ movies" means every movie of the director except the one rated >= 8.0.
   needs a shuffle-heavy join; conditional aggregation scans the data once.
 * **Merging duplicate identifiers of the same person:** not possible reliably
   with IMDb data alone; documented as a limit.
+---
+
+
+### 2.5 TV series with the worst episode in their last season and the best episode in the first two seasons (Q5)
+
+**Results:**
+
+We find 490 series that match the three conditions. The full table is in
+`q5_tv_series`. An extract:
+
+| series | best season | best rating | worst season | worst rating | last season |
+| --- | --- | --- | --- | --- | --- |
+| #LikeMe | 1 | 8.9 | 5 | 6.1 | 5 |
+| 'Til Death | 1 | 8.2 | 4 | 5.6 | 4 |
+| 12 O'Clock High | 1 | 8.7 | 3 | 6.7 | 3 |
+| 12 Words | 1 | 9.4 | 3 | 6.9 | 3 |
+| 13 Reasons Why | 1 | 9.1 | 4 | 5.1 | 4 |
+| 24 | 1 | 9.3 | 8 | 7.6 | 8 |
+| 30 prípadu majora Zemana | 2 | 7.3 | 3 | 4.9 | 3 |
+| 31 Minutes | 2 | 9.6 | 4 | 6.5 | 4 |
+| 90 Day Fiancé UK | 2 | 7.6 | 3 | 5.9 | 3 |
+| 90 Day: The Last Resort | 2 | 8.7 | 3 | 5.9 | 3 |
+
+**Interpretation:**
+
+These are series that started strong and ended badly. The best episode is
+almost always in season 1 or 2, and the worst episode is always in the last
+season, which is the condition of the question. The gap between the best and
+the worst episode varies a lot: for *24* it is only 1.7 points (9.3 down to
+7.6), while for *American Dreams* it goes from 9.7 in season 2 to 3.4 in
+season 3. Many of them are long series (5 to 9 seasons) and some are animated
+or non-English series (Turkish, Czech, Filipino).
+
+**Methodological Explanation (Q5):**
+
+To answer, we took the series (`titleType = 'tvSeries'`) and joined them with
+`title.episode` and `title.ratings` on `tconst`. We removed episodes without a
+rating because they cannot be compared. Then we keep only the series that have
+at least 3 seasons with at least 10 episodes each. For each series we compute
+the best and the worst episode with `row_number()` (a window ordered by
+rating), and we keep the first row. If two episodes have the same rating, we
+take the earliest season and then the earliest episode, so that the result is
+always the same when we rerun it. Finally we keep the series where the worst
+episode is in the last season and the best episode is in season 1 or 2.
+
+We hesitated to use `rank()` instead of `row_number()`, but `rank()` can
+return several seasons when there is a tie, so `row_number()` is simpler to
+get one answer per series. We also hesitated to use a total threshold of
+episodes (≥ 30 over the whole series) instead of 10 per season, but the
+question says "three seasons consisting of >=10 episodes", so we kept the
+per-season threshold. Finally we did not keep episodes without a rating: it
+makes the computation more complex and the definition of best/worst becomes
+unclear.
