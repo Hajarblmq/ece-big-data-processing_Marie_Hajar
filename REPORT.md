@@ -454,3 +454,39 @@ question says "three seasons consisting of >=10 episodes", so we kept the
 per-season threshold. Finally we did not keep episodes without a rating: it
 makes the computation more complex and the definition of best/worst becomes
 unclear.
+### 2.6 Actors with success in multiple languages (Q6)
+
+**Results:**
+
+We define a "successful movie" as a movie with `averageRating >= 7.0` and `numVotes >= 10000`. We deduce the language of a movie from the regions in `title.akas` (excluding US and GB to find foreign movies, and defaulting to English otherwise). 
+
+We find **1,904 actors/actresses** who have achieved success in movies in **>= 2 languages**, and **514 actors/actresses** in **>= 3 languages**. 
+
+Extract of the top results:
+
+| actor | nb languages | languages | nb movies |
+| --- | --- | --- | --- |
+| Amitabh Bachchan | 10 | de, el, en, es, fr, it, ja, nl, pl, pt | 24 |
+| Akshay Kumar | 9 | de, el, en, es, fr, hu, it, pt, ru | 23 |
+| Shah Rukh Khan | 9 | de, el, en, es, fa, fi, hu, pt, ru | 21 |
+| Aamir Khan | 9 | de, en, es, hu, pl, pt, ru, sv, tr | 18 |
+| Jackie Chan | 6 | el, es, fi, fr, pt, sv | 16 |
+
+**Interpretation:**
+
+The results are dominated by Indian actors (Bollywood). This makes sense because Indian films are very successful locally and are widely exported to many different regions (which gives them many different "languages" in our method). We also find actors from other countries (Jackie Chan for Hong Kong, etc.). 
+
+The method has a limit: we don't have the actual "original language" in IMDb, so we deduce it from the regions where the movie was released. This is why a movie like *Star Wars* might be counted as "Spanish" if it had many releases in Spain. However, by excluding US/GB, we force the algorithm to find truly international movies, which gives very realistic results for actors like Amitabh Bachchan.
+
+**Methodological Explanation (Q6):**
+
+To answer, we joined `title.principals` (filtered on `category = 'actor'` or `'actress'` and `ordering <= 5` to only keep leading roles) with `title.basics` (filtered on `titleType = 'movie'`) and `title.ratings` (filtered on `averageRating >= 7.0` and `numVotes >= 10000`). 
+
+To find the language, we used `title.akas`. Because the `language` column is often `NULL`, we created a mapping between regions and languages (e.g. `FR -> fr`, `JP -> ja`). We filter out US and GB to find foreign movies. For each movie, we take the most frequent non-US/GB language. If a movie only has US/GB regions, we default to English (`en`).
+
+We chose a threshold of 10,000 votes (instead of 1,000) to ensure that the movie is a real success and not a niche film. We also limited to `ordering <= 5` to avoid counting background actors.
+
+**Alternatives considered:** 
+* Using `isOriginalTitle = 1` to find the original language: returned 0 results because the `language` column is empty for original titles in IMDb.
+* Using all regions without excluding US/GB: returned 59,884 actors for 2 languages (unrealistic, because every Hollywood movie is translated everywhere).
+* Using a lower vote threshold: would include many obscure movies and inflate the results.
