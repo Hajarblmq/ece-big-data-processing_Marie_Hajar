@@ -454,3 +454,70 @@ question says "three seasons consisting of >=10 episodes", so we kept the
 per-season threshold. Finally we did not keep episodes without a rating: it
 makes the computation more complex and the definition of best/worst becomes
 unclear.
+
+
+## 4. Streaming Data Processing
+
+### 4.1 Results
+
+Test run, 25 minutes with the producer active for 20 minutes for English Wikipedia only.
+
+
+**Lookup table (watched IMDb names):**
+
+| entity type | rows |
+| --- | --- |
+| title (movies/series with >= 5,000 votes) | 22,536 |
+| person (top-4 billed, titles with >= 50,000 votes) | 8,092 |
+
+**Stream volume:**
+
+| metric | value |
+| --- | --- |
+| events received from Wikimedia (all wikis) | 35,569 |
+| English Wikipedia events sent to Kafka | 2,936 (+115 from an earlier test) |
+| Kafka rows read by Spark | 3,040 |
+| micro-batches (trigger: 30 s) | 43 |
+| average processing rate | 27.4 rows/s |
+| producer reconnections | 2 (resumed with `Last-Event-ID`) |
+
+**Matched edits by match quality:**
+
+| entity type | match quality | edits |
+| --- | --- | --- |
+| title | confirmed | 14 |
+| title | name_only | 10 |
+| title | other_suffix | 3 |
+| person | name_only | 5 |
+| **total** | | **32** |
+
+**Examples:**
+
+| Wikipedia page | type | match quality |
+| --- | --- | --- |
+| Ghost (1990 film) | title | confirmed |
+| Dandadan (TV series) | title | confirmed |
+| Tubelight (2017 Hindi film) | title | confirmed |
+| Throne of Blood | title | name_only |
+| Letitia Wright | person | name_only |
+| Addicted (Jisoo song) | title | other_suffix |
+| Idlewild (Media, Pennsylvania) | title | other_suffix |
+
+**Matched edits per 5-minute event-time window (finalised windows):**
+
+| window (UTC) | titles | people |
+| --- | --- | --- |
+| 08:30 – 08:35 | 2 | 0 |
+| 09:00 – 09:05 | 6 | 1 |
+| 09:05 – 09:10 | 7 | 1 |
+| 09:10 – 09:15 | 7 | 1 |
+
+**Late data:**
+
+| metric | value |
+| --- | --- |
+| delay Wikipedia edit → Kafka, median | 3 s |
+| delay, 99th percentile | 11.4 s |
+| delay, maximum | 12 s |
+| watermark | 2 minutes |
+| rows dropped by the watermark | 0 |
