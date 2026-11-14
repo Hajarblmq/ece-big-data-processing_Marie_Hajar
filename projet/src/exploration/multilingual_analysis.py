@@ -2,11 +2,12 @@
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
-from projet.src.io_utils import read_imdb
-from projet.src.spark_session import get_spark
-from projet.src.config import OUTPUT_DIR
+from ..io_utils import read_imdb
+from ..spark_session import get_spark
+from .common import load_clean, save_csv
 
-# Fallback used only when the original-title row has no language.
+# Used only when a title row has a region but no language.
+# Ambiguous regions (IN, CN, CH, BE, CA...) are left out on purpose.
 REGION_TO_LANG = {
     "US": "en", "GB": "en", "AU": "en", "FR": "fr", "DE": "de",
     "ES": "es", "MX": "es", "AR": "es", "IT": "it", "JP": "ja",
@@ -16,44 +17,64 @@ REGION_TO_LANG = {
 }
 
 
-def original_languages(akas: DataFrame) -> DataFrame:
-    """One (tconst, lang) row per title, deduced from its non-US/GB regions.
-    
-    If a movie has regions other than US/GB, we take the language
-    of the most frequent non-US/GB region (e.g. FR -> fr).
-    Otherwise, we default to 'en'.
+def original_languages(akas: DataFrame, basics: DataFrame,
+                       movies: DataFrame) -> DataFrame:
+    """One (tconst, lang) row per movie whose original language can be
+    inferred. Only the movies in `movies` are processed.
+
+    IMDb has no original-language column, and the 'original title' rows of
+    title.akas carry neither language nor region. The language is therefore
+    inferred in two steps:
+    1. If an original-title row has a language (or a mappable region), use it.
+    2. Otherwise, look at the aliases that are identical to the original
+       title: each such alias has a language (or a mappable region). The
+       language shared by the largest number of distinct regions wins;
+       ties are discarded as ambiguous.
     """
     mapping = F.create_map(
         *[F.lit(x) for kv in REGION_TO_LANG.items() for x in kv])
-    
-    # On prend les langues des régions qui ne sont ni US ni GB
-    foreign_candidates = (
-        akas.filter(
-            (F.col("region").isNotNull()) & 
-            (~F.col("region").isin("US", "GB"))
-        )
-        .withColumn("lang", mapping[F.col("region")])
+    lang_expr = F.coalesce(F.col("language"), mapping[F.col("region")])
+
+    wanted = F.broadcast(movies.select(F.col("tconst").alias("titleId")))
+    rows = akas.join(wanted, "titleId")
+    titles = basics.select(F.col("tconst").alias("titleId"), "originalTitle")
+
+    # 1. Strong signal: the original-title row itself.
+    strong = (
+        rows.filter(F.col("isOriginalTitle") == 1)
+        .select(F.col("titleId").alias("tconst"), lang_expr.alias("lang"))
         .filter(F.col("lang").isNotNull())
-        .select("titleId", "lang")
+        .groupBy("tconst")
+        .agg(F.countDistinct("lang").alias("n"), F.first("lang").alias("lang"))
+        .filter(F.col("n") == 1)
+        .select("tconst", F.col("lang").alias("strong_lang"))
     )
-    
-    # On garde la langue la plus fréquente pour chaque film
-    w = Window.partitionBy("titleId").orderBy(F.desc("count"))
-    
-    foreign_langs = (
-        foreign_candidates.groupBy("titleId", "lang").count()
-        .withColumn("rn", F.row_number().over(w))
-        .filter(F.col("rn") == 1)
-        .select(F.col("titleId").alias("tconst"), "lang")
+
+    # 2. Weak signal: majority vote among aliases equal to the original title.
+    same = (
+        rows.join(titles, "titleId")
+        .filter(F.col("title") == F.col("originalTitle"))
+        .select("titleId", "region", lang_expr.alias("lang"))
+        .filter(F.col("lang").isNotNull() & F.col("region").isNotNull())
     )
-    
-    # Pour les films qui n'ont QUE des régions US/GB, on met 'en'
-    all_titles = akas.select(F.col("titleId").alias("tconst")).distinct()
-    en_titles = all_titles.join(foreign_langs, "tconst", "left_anti") \
-        .withColumn("lang", F.lit("en"))
-        
-    # On fusionne les deux
-    return foreign_langs.union(en_titles)
+    votes = same.groupBy("titleId", "lang").agg(
+        F.countDistinct("region").alias("n_regions"))
+    w = Window.partitionBy("titleId").orderBy(F.desc("n_regions"))
+    ranked = (votes.withColumn("rk", F.row_number().over(w))
+              .withColumn("runner_up", F.lead("n_regions").over(w)))
+    weak = (
+        ranked.filter((F.col("rk") == 1)
+                      & (F.col("runner_up").isNull()
+                         | (F.col("runner_up") < F.col("n_regions"))))
+        .select(F.col("titleId").alias("tconst"),
+                F.col("lang").alias("weak_lang"))
+    )
+
+    return (
+        strong.join(weak, "tconst", "full_outer")
+        .select("tconst",
+                F.coalesce("strong_lang", "weak_lang").alias("lang"))
+    )
 
 
 def successful_movies(basics: DataFrame, ratings: DataFrame,
@@ -87,20 +108,19 @@ def actor_languages(principals: DataFrame, movies_langs: DataFrame,
 def main(min_rating: float = 7.0, min_votes: int = 10000) -> None:
     spark = get_spark("Exploration-Languages")
     spark.sparkContext.setLogLevel("ERROR")
-    
-    basics = read_imdb(spark, "title.basics")
-    ratings = read_imdb(spark, "title.ratings")
-    names = read_imdb(spark, "name.basics")
-    principals = read_imdb(spark, "title.principals")
+    basics = load_clean(spark, "title_basics")
+    ratings = load_clean(spark, "title_ratings")
+    names = load_clean(spark, "name_basics")
+    principals = load_clean(spark, "title_principals", drop_flagged=False)
     akas = read_imdb(spark, "title.akas")
 
     good = successful_movies(basics, ratings, min_rating, min_votes).cache()
-    langs = original_languages(akas)
+    langs = original_languages(akas, basics, good)
     movies_langs = good.join(langs, "tconst").cache()
 
     print(f"Successful movies (rating >= {min_rating}, votes >= {min_votes}): "
           f"{good.count()}")
-    print(f"... of which with a known original language: "
+    print(f"... of which with an inferred original language: "
           f"{movies_langs.count()}")
     movies_langs.groupBy("lang").count().orderBy(F.desc("count")).show(15)
 
@@ -114,13 +134,8 @@ def main(min_rating: float = 7.0, min_votes: int = 10000) -> None:
     print(f"Q6b - actors with success in >= 3 languages: {three.count()}")
     three.show(20, False)
 
-    # Sauvegarde
-    out_dir_2 = OUTPUT_DIR.parent / "exploration" / "q6_multilingual_2plus"
-    out_dir_3 = OUTPUT_DIR.parent / "exploration" / "q6_multilingual_3plus"
-    
-    multi.coalesce(1).write.mode("overwrite").option("header", True).csv(str(out_dir_2))
-    three.coalesce(1).write.mode("overwrite").option("header", True).csv(str(out_dir_3))
-    print(f"Written to {out_dir_2} and {out_dir_3}")
+    save_csv(multi, "q6_multilingual_2plus_languages")
+    save_csv(three, "q6_multilingual_3plus_languages")
 
 
 if __name__ == "__main__":
