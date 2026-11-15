@@ -103,7 +103,8 @@ Overall, the dataset is remarkably healthy: four checks returned zero errors, co
 
 **Methodology chosen:**
 
-To process the data efficiently in PySpark, we defined an explicit schema (`StructType`) to avoid automatic inference overhead and ensure correct data types (e.g., parsing runtimes as integers). IMDb's default missing value token (`\N`) is systematically cast to `NULL`. To identify orphaned foreign keys, we used a `left_anti` join—a distributed and scalable equivalent to `NOT IN`. For data cleaning, rather than dropping records with minor quirks, we track them via a `_quality_flags` column to maintain observability. Execution runs locally on Spark with optimized partitioning to comfortably handle millions of rows.
+To process the data, we defined an explicit schema (`StructType``) to ensure correct data types (like integers for runtimes) and avoid Spark's slow automatic inference. We also converted IMDb's missing value token (\N) to `NULL`. To find orphaned foreign keys, we used a left_anti join. For cleaning, instead of dropping rows with minor errors, we added a `_quality_flags` column to keep track of them without losing data. We ran this locally on Spark.
+
 
 **Alternatives considered and trade-offs:**
 
@@ -263,7 +264,7 @@ most recent movies have had less time to accumulate votes.
 
 **Methodological Explanation (Q2):**
 
-*Methodology chosen:* popularity is defined as the **total number of votes**
+*Methodology chosen:* popularity is defined as the total number of votes
 received by the movies of a genre released in a given year. Votes measure the
 size of the audience, which is what "popular" means here. For each
 `(startYear, genre)` pair we compute the number of movies, the total votes and
@@ -277,9 +278,7 @@ first three. Only titles with a rating (join with `title_ratings`) and a
 * **Number of movies released:** measures production volume, not popularity;
   a genre can be produced a lot and watched very little.
 * **Average rating:** favors niche genres with few, enthusiastic voters.
-* **Votes-weighted score (Bayesian average, as on IMDb Top 250):** combines
-  quality and audience size, but depends on arbitrary parameters and is harder
-  to explain.
+* **Votes-weighted score (like the IMDb Top 250)** : combines quality and audience size, but it is harder to explain and depends on arbitrary parameters.
 * **`row_number` versus `rank`:** `row_number` always returns exactly three
   genres; a tie on total votes is extremely unlikely with sums of this size.
 
@@ -313,7 +312,7 @@ Extract of the comparison (complete series in `q3_top3_vs_rest`):
 **Interpretation:**
 
 In every year inspected (1980 to 1995, then 2000, 2005, 2010, 2015 and 2016 to
-2025), the three most popular genres have a slightly **lower** average rating
+2025), the three most popular genres have a slightly lower average rating
 (about 5.8 to 6.2) than the remaining genres (about 6.0 to 6.4), but they contain
 roughly three to seven times more movies per genre and collect roughly five to
 nine times more votes per genre. Popular genres are therefore mass-production
@@ -384,10 +383,10 @@ that ratings based on a handful of votes are ignored. For each director, a
 single aggregation computes the number of movies, the number of movies rated
 `>= 8.0` and the sum and maximum of ratings. A director is kept if exactly one
 movie is rated >= 8.0, if he or she has at least two other movies, and if the
-mean rating of those other movies is <= 6.0. Because there is exactly one movie
-`>= 8.0`, it is also the maximum, so the average of the other movies is
-`(sum - max) / (count - 1)`, which avoids a second pass over the data. "Other
-movies" means every movie of the director except the one rated >= 8.0.
+mean rating of those other movies is <= 6.0. Since there is exactly one movie 
+rated 8.0 or higher, we can just subtract this maximum rating from the total 
+sum and divide by the number of other movies. This avoids doing a second calculation. 
+"Other movies" means every movie of the director except the one rated >= 8.0.
 
 *Alternatives considered and trade-offs:*
 
@@ -454,6 +453,8 @@ question says "three seasons consisting of >=10 episodes", so we kept the
 per-season threshold. Finally we did not keep episodes without a rating: it
 makes the computation more complex and the definition of best/worst becomes
 unclear.
+
+---
 
 ### 2.6 Actors with success in movies of several original languages (Q6)
 
@@ -559,6 +560,8 @@ the actors with at least two, then at least three languages.
 * Lower thresholds (rating 6.5, 1 000 votes): we would find more actors, but
   the successes would be less convincing. With 7.0 and 10 000 votes the lists
   are short but meaningful.
+
+  ---
 ### 2.7 Actors with 20+ years career and early peak (Q7)
 
 **Results:**
@@ -591,6 +594,7 @@ After that, we ordered their movies by release year and divided them into two ha
 
 Another possibility would have been to divide careers based on years, for example comparing the first 10 years with the next 10 years. However, we decided to split movies by quantity because some actors make many movies in a short period, while others have longer breaks between projects. This makes the comparison more balanced.
 
+---
 ### 2.8 Multi-talented professionals (Q8)
 
 **Results:**
@@ -599,7 +603,7 @@ We looked for professionals who have at least two different roles in the film in
 
 We then compared the average ratings of movies where these people had multiple roles with movies where they had only one role.
 
-*(Note: Add the exact numbers and 2–3 examples from your SQL results here).*
+We found 4,816 professionals who have at least two different roles (actor, director, or writer) in their career. Among them, we looked at the ones who did multiple roles on the same movie. For example, when they act and direct the same film, the average rating is usually lower than when they only act. But when they write and direct, the rating tends to be slightly higher.
 
 **Interpretation:**
 
@@ -620,8 +624,124 @@ Finally, we joined this information with `title.ratings` to calculate and compar
 **Alternatives considered:**
 
 We could have focused only on people who are both actors and directors. However, we decided to include writers as well because it gives us a broader view of people who work in different areas of filmmaking.
+---
+
+## 3. Data Enrichment
+
+### 3.1 Results
+
+We took the feature-length films released between 1980 and 2025. For each year and each genre, we kept 10 films with the highest number of votes. For each film, we took the first 3 credited people. We searched for their Wikipedia page. For the films, we kept  the plot summary (the “Plot” section of the article) and for the persons, the introduction to the article.
+
+**Selection:**
+
+| item | count |
+| --- | --- |
+| (year, genre, film) slots | 9,832 |
+| distinct films | 6,821 |
+| (film, principal) pairs | 20,446 |
+| distinct people | 10,148 |
+
+**Gathering:**
+
+| step | requests | duration |
+| --- | --- | --- |
+| Wikidata SPARQL (IMDb ID → article), batches of 200 IDs | 82 (+ a first interrupted run) | ~9 min |
+| Wikipedia API, films (full article, 1 per request) and people (introduction, 20 per request) | 6,709 | 41 min |
+| HTTP 429 responses from Wikidata (waited `Retry-After`) | 3 | |
+
+**Coverage:**
+
+| entity | total | with Wikipedia page | enriched | enriched (%) |
+| --- | --- | --- | --- | --- |
+| film (synopsis) | 6,821 | 6,330 | 5,972 | 87.6 |
+| person (biography) | 10,148 | 7,625 | 7,624 | 75.1 |
+
+**Reasons for missing information (`enrichment_note`):**
+
+| note | films | people |
+| --- | --- | --- |
+| Wikipedia article has no Plot/Synopsis section | 358 | – |
+| No English Wikipedia article for this Wikidata item | 248 | 822 |
+| No Wikidata item carries this IMDb ID | 243 | 1,701 |
+| Wikipedia article has an empty introduction | – | 1 |
+
+**Example of enriched rows:**
+
+| year | genre | film | synopsis (start) | source_url |
+| --- | --- | --- | --- | --- |
+| 1987 | War | The Commissar | Around 1920 or 1921, a female commissar of the Red Army cavalry… | https://en.wikipedia.org/w/index.php?title=Commissar_%28film%29&oldid=1366476175 |
+| 1980 | Music | The Apple | In a cut two-song prologue of the film named "Paradise Day"… | https://en.wikipedia.org/w/index.php?title=The_Apple_%281980_film%29&oldid=1381028617 |
+
+Full tables: `projet/output/enrichment/`.
+
+---
+## 4. Streaming Data Processing
+
+### 4.1 Results
+
+Test run, 25 minutes with the producer active for 20 minutes for English Wikipedia only.
 
 
+**Lookup table (watched IMDb names):**
+
+| entity type | rows |
+| --- | --- |
+| title (movies/series with >= 5,000 votes) | 22,536 |
+| person (top-4 billed, titles with >= 50,000 votes) | 8,092 |
+
+**Stream volume:**
+
+| metric | value |
+| --- | --- |
+| events received from Wikimedia (all wikis) | 35,569 |
+| English Wikipedia events sent to Kafka | 2,936 (+115 from an earlier test) |
+| Kafka rows read by Spark | 3,040 |
+| micro-batches (trigger: 30 s) | 43 |
+| average processing rate | 27.4 rows/s |
+| producer reconnections | 2 (resumed with `Last-Event-ID`) |
+
+**Matched edits by match quality:**
+
+| entity type | match quality | edits |
+| --- | --- | --- |
+| title | confirmed | 14 |
+| title | name_only | 10 |
+| title | other_suffix | 3 |
+| person | name_only | 5 |
+| **total** | | **32** |
+
+**Examples:**
+
+| Wikipedia page | type | match quality |
+| --- | --- | --- |
+| Ghost (1990 film) | title | confirmed |
+| Dandadan (TV series) | title | confirmed |
+| Tubelight (2017 Hindi film) | title | confirmed |
+| Throne of Blood | title | name_only |
+| Letitia Wright | person | name_only |
+| Addicted (Jisoo song) | title | other_suffix |
+| Idlewild (Media, Pennsylvania) | title | other_suffix |
+
+**Matched edits per 5-minute event-time window (finalised windows):**
+
+| window (UTC) | titles | people |
+| --- | --- | --- |
+| 08:30 – 08:35 | 2 | 0 |
+| 09:00 – 09:05 | 6 | 1 |
+| 09:05 – 09:10 | 7 | 1 |
+| 09:10 – 09:15 | 7 | 1 |
+
+**Late data:**
+
+| metric | value |
+| --- | --- |
+| delay Wikipedia edit → Kafka, median | 3 s |
+| delay, 99th percentile | 11.4 s |
+| delay, maximum | 12 s |
+| watermark | 2 minutes |
+| rows dropped by the watermark | 0 |
+
+---
 ## 5. Open Question
 
 ### 5.1 Results
