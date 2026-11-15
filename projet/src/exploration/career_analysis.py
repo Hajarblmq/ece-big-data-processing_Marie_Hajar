@@ -1,89 +1,106 @@
-"""Q7: Actors/actresses with 20+ years career and early popularity peak."""
-from pyspark.sql import Window
+"""Q7: actors/actresses with a career of 20+ years and 15+ movies whose
+popularity peaked early in their career."""
+from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
-from projet.src.io_utils import read_imdb
-from projet.src.spark_session import get_spark
-from projet.src.config import OUTPUT_DIR
+from ..spark_session import get_spark
+from .common import load_clean, save_csv
 
 
-def main():
+def actor_movies(principals: DataFrame, basics: DataFrame,
+                 ratings: DataFrame, min_votes: int) -> DataFrame:
+    """One row per (actor, movie) for rated movies with a leading role.
+
+    Leading role = actor or actress with ordering <= 5. Only movies with a
+    release year and at least `min_votes` votes are kept.
+    """
+    movies = (
+        basics.filter((F.col("titleType") == "movie")
+                      & F.col("startYear").isNotNull())
+        .select("tconst", "startYear")
+        .join(ratings.filter(F.col("numVotes") >= min_votes)
+              .select("tconst", "averageRating", "numVotes"), "tconst")
+    )
+    actors = (principals
+              .filter(F.col("category").isin("actor", "actress")
+                      & (F.col("ordering") <= 5))
+              .select("nconst", "tconst").distinct())
+    return actors.join(F.broadcast(movies), "tconst")
+
+
+def career_halves(movies: DataFrame, min_movies: int = 15,
+                  min_span: int = 20) -> DataFrame:
+    """Per actor with >= `min_movies` movies over >= `min_span` years: mean
+    and best rating of the first half and of the second half of the career.
+
+    The movies of an actor are sorted by year (then by id, so that the order is
+    reproducible) and cut in two halves of equal size.
+    """
+    by_actor = Window.partitionBy("nconst")
+    ordered = Window.partitionBy("nconst").orderBy("startYear", "tconst")
+    ranked = (
+        movies
+        .withColumn("n_movies", F.count("*").over(by_actor))
+        .withColumn("first_year", F.min("startYear").over(by_actor))
+        .withColumn("last_year", F.max("startYear").over(by_actor))
+        .filter((F.col("n_movies") >= min_movies)
+                & (F.col("last_year") - F.col("first_year") >= min_span))
+        .withColumn("rank", F.row_number().over(ordered))
+        .withColumn("early", F.col("rank") <= F.ceil(F.col("n_movies") / 2))
+    )
+    early = F.col("early")
+    return ranked.groupBy("nconst", "n_movies", "first_year", "last_year").agg(
+        F.avg(F.when(early, F.col("averageRating"))).alias("avg_early"),
+        F.avg(F.when(~early, F.col("averageRating"))).alias("avg_late"),
+        F.max(F.when(early, F.col("averageRating"))).alias("best_early"),
+        F.max(F.when(~early, F.col("averageRating"))).alias("best_late"),
+    )
+
+
+def early_peak(halves: DataFrame, names: DataFrame,
+               min_drop: float = 0.5) -> DataFrame:
+    """Actors whose best movie is in the first half of the career and whose
+    mean rating drops by at least `min_drop` points in the second half."""
+    return (
+        halves
+        .withColumn("drop", F.col("avg_early") - F.col("avg_late"))
+        .filter((F.col("drop") >= min_drop)
+                & (F.col("best_early") > F.col("best_late")))
+        .join(names.select("nconst", "primaryName"), "nconst")
+        .select("nconst", "primaryName", "first_year", "last_year",
+                "n_movies",
+                F.round("avg_early", 2).alias("avg_early"),
+                F.round("avg_late", 2).alias("avg_late"),
+                F.round("drop", 2).alias("drop"),
+                F.col("best_early"), F.col("best_late"))
+        .orderBy(F.desc("drop"), F.desc("n_movies"))
+    )
+
+
+def main(min_votes: int = 1000, min_drop: float = 0.5) -> None:
     spark = get_spark("Exploration-Careers")
     spark.sparkContext.setLogLevel("ERROR")
+    basics = load_clean(spark, "title_basics")
+    ratings = load_clean(spark, "title_ratings")
+    names = load_clean(spark, "name_basics")
+    principals = load_clean(spark, "title_principals", drop_flagged=False)
 
-    # 1. Chargement des tables
-    basics = read_imdb(spark, "title.basics")
-    ratings = read_imdb(spark, "title.ratings")
-    principals = read_imdb(spark, "title.principals")
-    names = read_imdb(spark, "name.basics")
+    movies = actor_movies(principals, basics, ratings, min_votes)
+    halves = career_halves(movies).cache()
+    result = early_peak(halves, names, min_drop).cache()
 
-    # 2. On garde uniquement les films avec une note et une année de sortie
-    movies = basics.filter(
-        (F.col("titleType") == "movie") & 
-        F.col("startYear").isNotNull()
-    ).select("tconst", "startYear")
+    n_valid = halves.count()
+    n_naive = halves.filter(F.col("avg_early") > F.col("avg_late")).count()
+    n_result = result.count()
+    print(f"Actors with >= 15 movies (>= {min_votes} votes) over >= 20 years: "
+          f"{n_valid}")
+    print(f"... with a higher mean rating in the first half (no margin): "
+          f"{n_naive}")
+    print(f"... early peak (best movie in the first half and drop >= "
+          f"{min_drop}): {n_result}")
+    result.show(25, False)
 
-    rated_movies = movies.join(ratings, "tconst").select("tconst", "startYear", "averageRating")
-
-    # 3. On garde les acteurs (rôles principaux)
-    actors = principals.filter(
-        F.col("category").isin("actor", "actress") & (F.col("ordering") <= 5)
-    ).select("tconst", "nconst").distinct()
-
-    # 4. Jointure acteurs + films
-    actor_movies = actors.join(rated_movies, "tconst")
-
-    # 5. Statistiques par acteur (nombre de films, première et dernière année)
-    actor_stats = actor_movies.groupBy("nconst").agg(
-        F.count("tconst").alias("nb_movies"),
-        F.min("startYear").alias("first_year"),
-        F.max("startYear").alias("last_year")
-    )
-
-    # Condition 1 : >= 15 films et >= 20 ans de carrière
-    valid_actors = actor_stats.filter(
-        (F.col("nb_movies") >= 15) & 
-        ((F.col("last_year") - F.col("first_year")) >= 20)
-    )
-
-    # 6. Calcul du pic précoce
-    # On trie les films de chaque acteur par année
-    w = Window.partitionBy("nconst").orderBy("startYear")
-    actor_movies_ranked = actor_movies.withColumn("rank", F.row_number().over(w))
-    
-    # On joint avec le nombre total de films pour trouver la moitié
-    actor_movies_ranked = actor_movies_ranked.join(valid_actors, "nconst")
-    actor_movies_ranked = actor_movies_ranked.withColumn(
-        "half", F.ceil(F.col("nb_movies") / 2)
-    )
-
-    # Moyenne de la première moitié de carrière
-    first_half = actor_movies_ranked.filter(F.col("rank") <= F.col("half")) \
-        .groupBy("nconst").agg(F.avg("averageRating").alias("avg_first_half"))
-
-    # Moyenne de la deuxième moitié de carrière
-    second_half = actor_movies_ranked.filter(F.col("rank") > F.col("half")) \
-        .groupBy("nconst").agg(F.avg("averageRating").alias("avg_second_half"))
-
-    # 7. Résultat final : première moitié > deuxième moitié
-    result = valid_actors \
-        .join(first_half, "nconst") \
-        .join(second_half, "nconst") \
-        .filter(F.col("avg_first_half") > F.col("avg_second_half")) \
-        .join(names.select("nconst", "primaryName"), "nconst") \
-        .select(
-            "nconst", "primaryName", "first_year", "last_year", 
-            "nb_movies", F.round("avg_first_half", 2).alias("avg_early"), 
-            F.round("avg_second_half", 2).alias("avg_late")
-        ).orderBy(F.desc("nb_movies"))
-
-    print(f"Total actors with early peak: {result.count()}")
-    result.show(20, truncate=False)
-
-    # 8. Sauvegarde
-    out_dir = OUTPUT_DIR.parent / "exploration" / "q7_early_peaks"
-    result.coalesce(1).write.mode("overwrite").option("header", True).csv(str(out_dir))
-    print(f"Written to {out_dir}")
+    save_csv(result, "q7_early_peaks")
 
 
 if __name__ == "__main__":
