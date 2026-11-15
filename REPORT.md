@@ -455,62 +455,6 @@ per-season threshold. Finally we did not keep episodes without a rating: it
 makes the computation more complex and the definition of best/worst becomes
 unclear.
 
-
----
-
-## 5. Open Question
-
-### 5.1 Results
-
-We took all the films of our database IMDb and we kept only those with at least 40 minutes, no series and no adult films (real cinema films) that had at least 1 000 votes. There 49 434 remaining. 
-For each film, we checked the director and the 5 main actors. We formed "actor+ director" duos who worked together and counted the number of films each duo made together. We kept those with at least 3 common films. 
-We compared the rating of their films together with the rating when they worked separately (the lift).
-
-**Overall:**
-
-| pairs | avg rating lift | median rating lift | pairs better together (%) | median votes ratio (together / apart) |
-| --- | --- | --- | --- | --- |
-| 2,084 | +0.219 | +0.243 | 67.9 | 0.88 |
-
-**By number of collaborations:**
-
-| films together | pairs | avg rating lift | median rating lift | pairs better together (%) | median votes ratio |
-| --- | --- | --- | --- | --- | --- |
-| 3 | 1,252 | +0.221 | +0.248 | 66.6 | 0.88 |
-| 4–5 | 628 | +0.211 | +0.228 | 69.7 | 0.86 |
-| 6+ | 204 | +0.233 | +0.246 | 70.1 | 0.89 |
-
-**Most frequent pairs (extract):**
-
-| actor | director | films together | years | rating together | actor apart | director apart | lift |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Kemal Sunal | Kartal Tibet | 26 | 1976–1990 | 6.91 | 7.37 | 5.40 | +0.52 |
-| Sidney James | Gerald Thomas | 21 | 1960–1974 | 6.27 | 6.80 | 5.45 | +0.14 |
-| Toshirō Mifune | Akira Kurosawa | 16 | 1948–1965 | 7.81 | 7.25 | 7.24 | +0.57 |
-| Mohanlal | Priyadarshan | 15 | 1985–2021 | 7.51 | 6.88 | 6.62 | +0.77 |
-| John Wayne | John Ford | 14 | 1939–1963 | 7.25 | 6.32 | 6.89 | +0.64 |
-| Chishū Ryū | Yasujirō Ozu | 13 | 1930–1962 | 7.66 | 8.00 | 7.48 | −0.08 |
-| Christian De Sica | Neri Parenti | 12 | 1985–2008 | 4.40 | 5.28 | 6.02 | −1.25 |
-
-**Largest positive lift (extract):**
-
-| actor | director | films together | rating together | actor apart | director apart | lift |
-| --- | --- | --- | --- | --- | --- | --- |
-| Diane Keaton | Francis Ford Coppola | 3 | 8.57 | 6.15 | 6.40 | +2.29 |
-| Elijah Wood | Peter Jackson | 3 | 8.90 | 6.16 | 7.38 | +2.13 |
-| Al Pacino | Francis Ford Coppola | 3 | 8.57 | 6.53 | 6.40 | +2.10 |
-| Michael Madsen | Quentin Tarantino | 3 | 8.13 | 4.79 | 7.64 | +1.92 |
-
-**Largest negative lift (extract):**
-
-| actor | director | films together | rating together | actor apart | director apart | lift |
-| --- | --- | --- | --- | --- | --- | --- |
-| Altan Erkekli | Doga Can Anafarta | 3 | 2.27 | 6.61 | 4.57 | −3.32 |
-| Salman Khan | Prabhu Deva | 3 | 3.80 | 5.53 | 5.59 | −1.76 |
-| Morgan Freeman | George Gallo | 3 | 4.53 | 6.54 | 5.99 | −1.73 |
-| Bruce Willis | Matt Eskandari | 4 | 3.70 | 5.57 | 5.13 | −1.65 |
-
-The full tables are in `projet/output/open_question/`.
 ### 2.6 Actors with success in movies of several original languages (Q6)
 
 **Results:**
@@ -676,3 +620,58 @@ Finally, we joined this information with `title.ratings` to calculate and compar
 **Alternatives considered:**
 
 We could have focused only on people who are both actors and directors. However, we decided to include writers as well because it gives us a broader view of people who work in different areas of filmmaking.
+
+
+## 5. Open Question
+
+### 5.1 Results
+
+We took all the films of our database IMDb and we kept only those with at least 40 minutes, no series and no adult films (real cinema films) that had at least 1 000 votes. There 49 434 remaining. 
+For each film, we checked the director and the 5 main actors. We formed "actor+ director" duos who worked together and counted the number of films each duo made together. We kept those with at least 3 common films. 
+We compared the rating of their films together with the rating when they worked separately (the lift).
+
+**Overall:**
+
+| pairs | avg rating lift | median rating lift | pairs better together (%) | median votes ratio (together / apart) |
+| --- | --- | --- | --- | --- |
+| 2,084 | +0.219 | +0.243 | 67.9 | 0.88 |
+
+**By number of collaborations:**
+
+| films together | pairs | avg rating lift | median rating lift | pairs better together (%) | median votes ratio |
+| --- | --- | --- | --- | --- | --- |
+| 3 | 1,252 | +0.221 | +0.248 | 66.6 | 0.88 |
+| 4–5 | 628 | +0.211 | +0.228 | 69.7 | 0.86 |
+| 6+ | 204 | +0.233 | +0.246 | 70.1 | 0.89 |
+
+**Most frequent pairs (extract):**
+
+| actor | director | films together | years | rating together | actor apart | director apart | lift |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Kemal Sunal | Kartal Tibet | 26 | 1976–1990 | 6.91 | 7.37 | 5.40 | +0.52 |
+| Sidney James | Gerald Thomas | 21 | 1960–1974 | 6.27 | 6.80 | 5.45 | +0.14 |
+| Toshirō Mifune | Akira Kurosawa | 16 | 1948–1965 | 7.81 | 7.25 | 7.24 | +0.57 |
+| Mohanlal | Priyadarshan | 15 | 1985–2021 | 7.51 | 6.88 | 6.62 | +0.77 |
+| John Wayne | John Ford | 14 | 1939–1963 | 7.25 | 6.32 | 6.89 | +0.64 |
+| Chishū Ryū | Yasujirō Ozu | 13 | 1930–1962 | 7.66 | 8.00 | 7.48 | −0.08 |
+| Christian De Sica | Neri Parenti | 12 | 1985–2008 | 4.40 | 5.28 | 6.02 | −1.25 |
+
+**Largest positive lift (extract):**
+
+| actor | director | films together | rating together | actor apart | director apart | lift |
+| --- | --- | --- | --- | --- | --- | --- |
+| Diane Keaton | Francis Ford Coppola | 3 | 8.57 | 6.15 | 6.40 | +2.29 |
+| Elijah Wood | Peter Jackson | 3 | 8.90 | 6.16 | 7.38 | +2.13 |
+| Al Pacino | Francis Ford Coppola | 3 | 8.57 | 6.53 | 6.40 | +2.10 |
+| Michael Madsen | Quentin Tarantino | 3 | 8.13 | 4.79 | 7.64 | +1.92 |
+
+**Largest negative lift (extract):**
+
+| actor | director | films together | rating together | actor apart | director apart | lift |
+| --- | --- | --- | --- | --- | --- | --- |
+| Altan Erkekli | Doga Can Anafarta | 3 | 2.27 | 6.61 | 4.57 | −3.32 |
+| Salman Khan | Prabhu Deva | 3 | 3.80 | 5.53 | 5.59 | −1.76 |
+| Morgan Freeman | George Gallo | 3 | 4.53 | 6.54 | 5.99 | −1.73 |
+| Bruce Willis | Matt Eskandari | 4 | 3.70 | 5.57 | 5.13 | −1.65 |
+
+The full tables are in `projet/output/open_question/`.
