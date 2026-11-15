@@ -847,7 +847,7 @@ The full tables are in `projet/output/open_question/`.
 
 ### 5.2 Question and motivation
 
-The main question here was to know if the "actor + director duos were better (making better films) together or separately.
+The main question here was to know if the "actor + director" duos were better (making better films) together or separately.
 We all know famous actors + directors duos and we wanted to check by using numbers. 
 
 ### 5.3 Key takeaways
@@ -857,9 +857,9 @@ We saw that 68% of the duos are better rated together and that the gain does not
 ### 5.4 Methodological Explanation
 
 **Methodology chosen:**
-We compared each duo to their films made separately (one without the other) to mesure the impact of the collaboration and not the individual skills. The thresholds were at least 1000 votes, 3 films together ans 3 film individually or separately.
+We compared each duo to their films made separately (one without the other) to measure the impact of the collaboration and not the individual skills. The thresholds were at least 1000 votes, 3 films together and 3 films individually or separately.
 
 **Alternatives considered and trade-offs:**
 
 - We could have used the number of votes rather than the rating.
-- We could have also made a statistic test to check if the difference is not due to chance.
+- We could have also made a statistical test to check if the difference is not due to chance.
