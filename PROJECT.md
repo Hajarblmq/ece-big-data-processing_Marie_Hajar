@@ -10,11 +10,9 @@ methodology texts of REPORT.md were written by us.
 
 - **ChatGPT (Hajar)**: debugging PySpark errors, structuring the code of
   parts 1 and 2, Markdown formatting of the report.
-- **Claude (Marie)**: writing the code of the streaming pipeline
+- **Claude (Marie)**: structuring the code of the streaming pipeline
   (`src/streaming/`), the enrichment pipeline (`src/enrichment/`) and the
-  open question (`src/open_question/`); help with the Windows setup, Git
-  (branches, merge conflicts), reviewing pull requests and the run
-  instructions of this file.
+  open question (`src/open_question/`); help with the merge conflicts.
 
 ## Environment Setup
 - Python 3.9+
