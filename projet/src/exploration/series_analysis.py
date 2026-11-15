@@ -1,3 +1,5 @@
+"""Q5: TV series with >=3 seasons of >=10 episodes, worst episode in last
+season and best episode within the first two seasons."""
 from pyspark.sql import functions as F
 from pyspark.sql import Window
 
@@ -13,7 +15,6 @@ def main():
     ratings = read_imdb(spark, "title.ratings")
     basics = read_imdb(spark, "title.basics")
 
-    # Only episodes with both season and episode numbers, and a rating
     episodes = episodes.dropna(subset=["parentTconst", "seasonNumber", "episodeNumber"])
     ratings = ratings.dropna(subset=["averageRating"])
 
@@ -36,7 +37,6 @@ def main():
         )
     )
 
-    # Condition 1: >=3 seasons, each with >=10 episodes
     season_counts = (
         ep_ratings
         .groupBy("series_id", "season")
@@ -51,7 +51,6 @@ def main():
         .select("series_id")
     )
 
-    # Best and worst episode per series (deterministic tie-break)
     w_best = Window.partitionBy("series_id").orderBy(
         F.desc("rating"), F.asc("season"), F.asc("episode")
     )
@@ -85,7 +84,6 @@ def main():
         .agg(F.max("season").alias("last_season"))
     )
 
-    # Final filter
     result = (
         valid_series
         .join(best_ep, "series_id")
