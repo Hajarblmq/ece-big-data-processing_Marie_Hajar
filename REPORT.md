@@ -103,7 +103,8 @@ Overall, the dataset is remarkably healthy: four checks returned zero errors, co
 
 **Methodology chosen:**
 
-To process the data efficiently in PySpark, we defined an explicit schema (`StructType`) to avoid automatic inference overhead and ensure correct data types (e.g., parsing runtimes as integers). IMDb's default missing value token (`\N`) is systematically cast to `NULL`. To identify orphaned foreign keys, we used a `left_anti` join—a distributed and scalable equivalent to `NOT IN`. For data cleaning, rather than dropping records with minor quirks, we track them via a `_quality_flags` column to maintain observability. Execution runs locally on Spark with optimized partitioning to comfortably handle millions of rows.
+To process the data, we defined an explicit schema (`StructType``) to ensure correct data types (like integers for runtimes) and avoid Spark's slow automatic inference. We also converted IMDb's missing value token (\N) to `NULL`. To find orphaned foreign keys, we used a left_anti join. For cleaning, instead of dropping rows with minor errors, we added a `_quality_flags` column to keep track of them without losing data. We ran this locally on Spark.
+
 
 **Alternatives considered and trade-offs:**
 
@@ -263,7 +264,7 @@ most recent movies have had less time to accumulate votes.
 
 **Methodological Explanation (Q2):**
 
-*Methodology chosen:* popularity is defined as the **total number of votes**
+*Methodology chosen:* popularity is defined as the total number of votes
 received by the movies of a genre released in a given year. Votes measure the
 size of the audience, which is what "popular" means here. For each
 `(startYear, genre)` pair we compute the number of movies, the total votes and
@@ -277,9 +278,7 @@ first three. Only titles with a rating (join with `title_ratings`) and a
 * **Number of movies released:** measures production volume, not popularity;
   a genre can be produced a lot and watched very little.
 * **Average rating:** favors niche genres with few, enthusiastic voters.
-* **Votes-weighted score (Bayesian average, as on IMDb Top 250):** combines
-  quality and audience size, but depends on arbitrary parameters and is harder
-  to explain.
+* **Votes-weighted score (like the IMDb Top 250)** : combines quality and audience size, but it is harder to explain and depends on arbitrary parameters.
 * **`row_number` versus `rank`:** `row_number` always returns exactly three
   genres; a tie on total votes is extremely unlikely with sums of this size.
 
@@ -313,7 +312,7 @@ Extract of the comparison (complete series in `q3_top3_vs_rest`):
 **Interpretation:**
 
 In every year inspected (1980 to 1995, then 2000, 2005, 2010, 2015 and 2016 to
-2025), the three most popular genres have a slightly **lower** average rating
+2025), the three most popular genres have a slightly lower average rating
 (about 5.8 to 6.2) than the remaining genres (about 6.0 to 6.4), but they contain
 roughly three to seven times more movies per genre and collect roughly five to
 nine times more votes per genre. Popular genres are therefore mass-production
@@ -382,12 +381,12 @@ inflates the count slightly; and the result depends on the vote threshold.
 movies (`titleType = 'movie'`) having a rating and **at least 1 000 votes**, so
 that ratings based on a handful of votes are ignored. For each director, a
 single aggregation computes the number of movies, the number of movies rated
->= 8.0 and the sum and maximum of ratings. A director is kept if exactly one
+`>= 8.0` and the sum and maximum of ratings. A director is kept if exactly one
 movie is rated >= 8.0, if he or she has at least two other movies, and if the
-mean rating of those other movies is <= 6.0. Because there is exactly one movie
->= 8.0, it is also the maximum, so the average of the other movies is
-`(sum - max) / (count - 1)`, which avoids a second pass over the data. "Other
-movies" means every movie of the director except the one rated >= 8.0.
+mean rating of those other movies is <= 6.0. Since there is exactly one movie 
+rated 8.0 or higher, we can just subtract this maximum rating from the total 
+sum and divide by the number of other movies. This avoids doing a second calculation. 
+"Other movies" means every movie of the director except the one rated >= 8.0.
 
 *Alternatives considered and trade-offs:*
 
@@ -454,3 +453,169 @@ question says "three seasons consisting of >=10 episodes", so we kept the
 per-season threshold. Finally we did not keep episodes without a rating: it
 makes the computation more complex and the definition of best/worst becomes
 unclear.
+
+### 2.6 Actors with success in movies of several original languages (Q6)
+
+**Results:**
+
+We define a successful movie as a movie rated at least 7.0 with at least
+10 000 votes. 4 963 movies meet this criterion, and we could infer an original
+language for 4 400 of them (89%). The 15 most frequent languages are:
+
+| language | movies |
+| --- | --- |
+| en | 3 810 |
+| fr | 205 |
+| es | 100 |
+| it | 61 |
+| de | 57 |
+| sv | 33 |
+| ko | 21 |
+| da | 18 |
+| tr | 16 |
+| fa | 14 |
+| ja | 13 |
+| pt | 12 |
+| nl | 8 |
+| pl | 7 |
+| no | 6 |
+
+We find 433 actors and actresses with a leading role in successful movies of
+at least 2 distinct original languages, and 39 of them reach at least 3
+languages. The table below is an extract, sorted by number of languages and
+then by number of successful movies (the complete lists are in
+`q6_multilingual_2plus_languages` and `q6_multilingual_3plus_languages`):
+
+| actor | languages | successful movies |
+| --- | --- | --- |
+| Gérard Depardieu | en, es, fr, it | 6 |
+| Penélope Cruz | en, es, it | 10 |
+| Diane Kruger | de, en, fr | 9 |
+| Gael García Bernal | en, es, fr | 9 |
+| Jean Reno | en, fr, it | 5 |
+| Alain Delon | en, fr, it | 6 |
+| Jeanne Moreau | en, es, fr | 7 |
+| Song Kang-ho | en, es, ko | 6 |
+
+**Interpretation:**
+
+Most of the people we find are European or Latin American actors who worked in
+their own language and in English, French, Italian or Spanish productions, for
+example Diane Kruger in German, English and French. The maximum is five
+languages and only 39 people reach three, so success in three languages is
+rare: it requires leading roles in successful movies from three different
+language markets.
+
+Limits. IMDb has no original-language column, so we had to infer it, and the
+result is biased in two ways.
+
+* English represents 87% of the movies with a known language, which is
+  probably more than in reality: a foreign movie whose title is kept unchanged
+  in the United States or the United Kingdom can be counted as English.
+* Languages written in non-Latin scripts are under-represented. The original
+  title of a Japanese or Turkish film is often romanized, so it is identical
+  to the aliases used in Germany, France or Italy, and the vote picks those
+  languages. Toshirō Mifune illustrates it: he appears with de, en, fr, it and
+  nl but with no Japanese, although his films are Japanese. Japanese has only
+  13 movies, and Hindi and Chinese do not appear at all because we left the
+  ambiguous regions out.
+
+The list is therefore reliable for languages written in the Latin alphabet,
+and it should be read as a lower bound for the others.
+
+**Methodological Explanation (Q6):**
+
+*Methodology chosen:* we define a successful movie as a `movie` rated at least
+7.0 with at least 10 000 votes: the rating measures quality and the number of
+votes makes sure it is not the opinion of a few enthusiastic viewers. An actor
+counts for a movie only with a leading role (`category` actor or actress and
+`ordering <= 5` in `title.principals`), so that a cameo does not count as a
+success in a language.
+
+The original language of a movie is not available in IMDb, so we infer it from
+`title.akas`, restricted to the successful movies. First, if the row marked
+`isOriginalTitle = 1` has a language, or a region that we can map to a
+language, we use it; this is rare because these rows are almost always empty.
+Second, we look at the aliases whose title is identical to the original title.
+Each of them has a language, or a region mapped to a language (a small table
+of unambiguous regions), and the language shared by the largest number of
+distinct regions wins. We discard ties as ambiguous. Finally, for each actor
+we count the distinct languages of his or her successful movies, and we keep
+the actors with at least two, then at least three languages.
+
+*Alternatives considered and trade-offs:*
+
+* Original-title row only (`isOriginalTitle = 1`): this is the cleanest
+  signal, but these rows have almost no language and no region. Our first
+  version with this rule found a language for 0 movies out of 4 963.
+* First alias identical to the original title: this gives a high coverage, but
+  the choice is arbitrary because a title is kept in many countries. Our
+  attempt with this rule gave actors with up to 11 original languages (Tom
+  Hanks), which is absurd. The majority vote is more stable.
+* External source (Wikipedia or Wikidata original language): much more
+  accurate, in particular for non-Latin languages, but it needs network access
+  and a step to match titles. It could be done in the Enrichment part.
+* Lower thresholds (rating 6.5, 1 000 votes): we would find more actors, but
+  the successes would be less convincing. With 7.0 and 10 000 votes the lists
+  are short but meaningful.
+### 2.7 Actors with 20+ years career and early peak (Q7)
+
+**Results:**
+
+We found 7,275 actors who have appeared in at least 15 movies and had a career lasting 20 years or more. Their average rating during the first half of their career is higher than during the second half.
+
+Here are three examples:
+
+| Actor | First year | Last year | Nb movies | Avg early | Avg late |
+| --- | --- | --- | --- | --- | --- |
+| Brahmanandam | 1987 | 2025 | 531 | 6.52 | 5.55 |
+| Mammootty | 1980 | 2026 | 370 | 7.01 | 6.02 |
+| Mohanlal | 1978 | 2026 | 352 | 6.94 | 5.97 |
+
+**Interpretation:**
+
+Most of the actors in the results are Indian actors who have had very long careers. We can see that their movies generally received better ratings during the first part of their careers than during the second part.
+
+To make this comparison, we divided each actor's movies into two equal parts based on the number of movies, and then calculated the average rating for each part.
+
+**Methodological Explanation (Q7):**
+
+First, we joined `title.principals` with `title.basics` and `title.ratings`. We only kept people who worked as actors or actresses (`category = 'actor'` or `'actress'`) and who had an `ordering` value of 5 or less.
+
+We also kept only movies and selected actors who appeared in at least 15 movies and had a career of at least 20 years.
+
+After that, we ordered their movies by release year and divided them into two halves. Finally, we calculated the average rating for each half and kept only the actors whose first-half average was higher than their second-half average.
+
+**Alternatives considered:**
+
+Another possibility would have been to divide careers based on years, for example comparing the first 10 years with the next 10 years. However, we decided to split movies by quantity because some actors make many movies in a short period, while others have longer breaks between projects. This makes the comparison more balanced.
+
+### 2.8 Multi-talented professionals (Q8)
+
+**Results:**
+
+We looked for professionals who have at least two different roles in the film industry, among actor, director and writer.
+
+We then compared the average ratings of movies where these people had multiple roles with movies where they had only one role.
+
+We found 4,816 professionals who have at least two different roles (actor, director, or writer) in their career. Among them, we looked at the ones who did multiple roles on the same movie. For example, when they act and direct the same film, the average rating is usually lower than when they only act. But when they write and direct, the rating tends to be slightly higher.
+
+**Interpretation:**
+
+This analysis helps us understand whether having several roles in the same movie has an impact on its rating.
+
+For example, some people work as both actors and directors, or as actors and writers. We wanted to see if movies where they have multiple responsibilities receive better or worse ratings than movies where they only have one role.
+
+**Methodological Explanation (Q8):**
+
+First, we used the `title.crew` table to get the directors and writers of each movie. We separated these roles so that each person could be linked to their corresponding role.
+
+We also used `title.principals` to get the actors. Then, we grouped the data by person and movie to count how many different roles each person had in the same movie.
+
+If a person had at least two roles in one movie, we classified it as a multi-role movie. Otherwise, it was classified as a single-role movie.
+
+Finally, we joined this information with `title.ratings` to calculate and compare the average ratings of both groups.
+
+**Alternatives considered:**
+
+We could have focused only on people who are both actors and directors. However, we decided to include writers as well because it gives us a broader view of people who work in different areas of filmmaking.
