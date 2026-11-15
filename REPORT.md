@@ -626,7 +626,7 @@ We could have focused only on people who are both actors and directors. However,
 
 ### 3.1 Results
 
-We took the long features released between 1980 and 2025. For each year et each genre, we kept 10 films with the highest number of votes. For each film, we took the 3first 3 persons credited. We searched for their Wikipedia page. For the films, we kept the résumé of the story and for the persons, the introduction to the article.
+We took the feature-length films released between 1980 and 2025. For each year and each genre, we kept 10 films with the highest number of votes. For each film, we took the first 3 credited people. We searched for their Wikipedia page. For the films, we kept  the plot summary (the “Plot” section of the article) and for the persons, the introduction to the article.
 
 **Selection:**
 
