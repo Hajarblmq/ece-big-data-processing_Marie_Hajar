@@ -630,7 +630,7 @@ We could have focused only on people who are both actors and directors. However,
 
 ### 3.1 Results
 
-We took the feature-length films released between 1980 and 2025. For each year and each genre, we kept 10 films with the highest number of votes. For each film, we took the first 3 credited people. We searched for their Wikipedia page. For the films, we kept  the plot summary (the “Plot” section of the article) and for the persons, the introduction to the article.
+We took the feature-length films released between 1980 and 2025. For each year and each genre, we kept 10 films with the highest number of votes. For each film, we took the first 3 credited people. We searched for their Wikipedia page. For the films, we kept the plot summary (the 'Plot' section of the article) and for the people, the introduction to the article.
 
 **Selection:**
 
@@ -674,13 +674,36 @@ We took the feature-length films released between 1980 and 2025. For each year a
 
 Full tables: `projet/output/enrichment/`.
 
+### 3.2 Methodological Explanation
+
+**Methodology chosen:**
+
+The source we used is Wikipedia in english because it is open source and the text is reusable. The problem was, if we looked for "Titanic" for example on Wikipedia, the ouput was either the boat or the 1953 movie but not the 1997 movie.
+Since Wikidata is a huge database linked to Wikipedia, where every movie et every person has an information sheet with the IMDb ID on it and the link to the Wikipedia page, we simply give the ID, and the Wikidata gives us the right page without any possible mistake. We did that in batches of 200 IDs per query, resulting in 82 queries for 17 000 IDs.
+For each movie,we collect the 'Plot' section of the article and for each person, we collect the introduction of the article which provides a summary of that person (birth date, job, well-known works).
+
+The Data gathering was done out of Spark. Searching for pages on the internet means waiting for des answers one by one,and respecting the breaks. Spark is used to compute quickly on a huge volume of data, not to wait. Hence, a simple Python script is more suitable. All the rest is done with Spark (movies choice, cleaning, joins).
+
+We also respected the Wikipedia and Wikidata rules: one query at the time with a break of 0,25 s for Wikipedia and 5 s for Wikidata (which is more strict). Each query identifies us and when the server responds 429 the script waits for the suitable time (120 s) instead of insisting. It arrived 3 times with Wikidata.
+
+Each line keeps the source_url,which is the link to the exact version of the page we read. If the article changes, we can still find what we read.
+
+Each answer is written one after the other. If the script stops, it restarts where it ended without asking for the same pages again. For millions of films it is very important.
+
+**Alternatives considered and trade-offs:**
+
+- Search for a page by the movie title: it is simpler but many mistakes can occur.
+- Classify by ratings instead of classifying by votes
+- The introduction of the article instead of the 'Plot' section for movies
+- Use Spark for the retrieval: the incovenient is that the queries would be sent in parallel by multiple tasks which makes the limits of Wikipedia more difficult to respect.
+
 ---
+
 ## 4. Streaming Data Processing
 
 ### 4.1 Results
 
-Test run, 25 minutes with the producer active for 20 minutes for English Wikipedia only.
-
+Test run on 14 November, 25 minutes with the producer active for 20 minutes for English Wikipedia only.
 
 **Lookup table (watched IMDb names):**
 
@@ -741,7 +764,33 @@ Test run, 25 minutes with the producer active for 20 minutes for English Wikiped
 | watermark | 2 minutes |
 | rows dropped by the watermark | 0 |
 
+### 4.2 Methodological Explanation
+
+**Methodology chosen:**
+ We used a Python script to receive in real time the updates coming from all the wikis. It kept only the english Wikipedia. The script sends the updates into Kafka which keeps them until Spark finally reads them. 
+ The IMDb list has been prepared and the first try at 1,6 millions was already serving many false positives. 
+ Spark read Kafka and cleaned each page and joined it with the list.
+ Each match received a label for reliability. (confirmed, name-only, other_suffix).
+ Spark counted the matches by bunhes of 5 minutes and saved the results and metrics.
+
+
+**Late data handling:**
+- We chose the right time: counted according to the update time on wikipedia, not the arrival time in Spark.
+- We assigned a delay (a watermark of 2 minutes)
+- We ignored the latest  delays
+- The last bunches have not been written because the streaming stopped before the closure.
+
+**Alternatives considered and trade-offs:**
+
+- Filtering in Spark instead of Python: This would send  more messages to Kafka but we could keep all languages for other analyses.
+- Using Wikidata: This would provide exact matches but it requires one request for every Wikipedia update.
+- Using approximate matching: This would find more results, including titles with spelling mistakes but would also create more false matches.
+- Using a shorter watermark: the results would be available faster, but more late messages could be lost.
+- Using a longer watermark: This would be safer, but results would arrive later and Spark would need more memory.
+- Using no watermark: No late messages would be ignored, but memory usage would grow continuously. We also could not use append mode to write final results.
+
 ---
+
 ## 5. Open Question
 
 ### 5.1 Results
@@ -795,3 +844,22 @@ We compared the rating of their films together with the rating when they worked 
 | Bruce Willis | Matt Eskandari | 4 | 3.70 | 5.57 | 5.13 | −1.65 |
 
 The full tables are in `projet/output/open_question/`.
+
+### 5.2 Question and motivation
+
+The main question here was to know if the "actor + director" duos were better (making better films) together or separately.
+We all know famous actors + directors duos and we wanted to check by using numbers. 
+
+### 5.3 Key takeaways
+
+We saw that 68% of the duos are better rated together and that the gain does not change with the number of films made together.
+
+### 5.4 Methodological Explanation
+
+**Methodology chosen:**
+We compared each duo to their films made separately (one without the other) to measure the impact of the collaboration and not the individual skills. The thresholds were at least 1000 votes, 3 films together and 3 films individually or separately.
+
+**Alternatives considered and trade-offs:**
+
+- We could have used the number of votes rather than the rating.
+- We could have also made a statistical test to check if the difference is not due to chance.
