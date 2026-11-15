@@ -683,7 +683,7 @@ The source we used is Wikipedia in english because it is open source and the tex
 Since Wikidata is a huge database linked to Wikipedia, where every movie et every person has an information sheet with the IMDb ID on it and the link to the Wikipedia page, we simply give the ID, and the Wikidata gives us the right page without any possible mistake. We did that in batches of 200 IDs per query, resulting in 82 queries for 17 000 IDs.
 For each movie,we collect the 'Plot' section of the article and for each person, we collect the introduction of the article which provides a summary of that person (birth date, job, well-known works).
 
-The Data gathering was done out of Spark. Searching for pages on the internet means waiting for des answers one by one,and respecting the breaks. Spark is used to compute quickly on a huge volume of data, not to wait. Hence, a simple Python script is more suitable.
+The Data gathering was done out of Spark. Searching for pages on the internet means waiting for des answers one by one,and respecting the breaks. Spark is used to compute quickly on a huge volume of data, not to wait. Hence, a simple Python script is more suitable. All the rest is done with Spark (movies choice, cleaning, joins).
 
 We also respected the Wikipedia and Wikidata rules: one query at the time with a break of 0,25 s for Wikipedia and 5 s for Wikidata (which is more strict). Each query identifies us and when the server responds 429 the script waits for the suitable time (120 s) instead of insisting. It arrived 3 times with Wikidata.
 
@@ -770,7 +770,7 @@ Test run on 14 November, 25 minutes with the producer active for 20 minutes for 
 **Methodology chosen:**
  We used a Python script to receive in real time the updates coming from all the wikis. It kept only the english Wikipedia. The script sends the updates into Kafka which keeps them until Spark finally reads them. 
  The IMDb list has been prepared and the first try at 1,6 millions was already serving many false positives. 
- Spark read Kafka ans cleaned eaxh page and joined it with the list.
+ Spark read Kafka and cleaned each page and joined it with the list.
  Each match received a label for reliability. (confirmed, name-only, other_suffix).
  Spark counted the matches by bunhes of 5 minutes and saved the results and metrics.
 
