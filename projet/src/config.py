@@ -3,7 +3,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAW_DIR = PROJECT_ROOT / "projet" / "data" / "raw"
-OUTPUT_DIR = PROJECT_ROOT / "output" / "preparation"
+OUTPUT_DIR = PROJECT_ROOT / "projet" / "output" / "preparation"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 NULL_TOKEN = "\\N"
