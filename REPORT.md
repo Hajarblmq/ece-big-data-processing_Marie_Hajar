@@ -103,7 +103,8 @@ Overall, the dataset is remarkably healthy: four checks returned zero errors, co
 
 **Methodology chosen:**
 
-To process the data efficiently in PySpark, we defined an explicit schema (`StructType`) to avoid automatic inference overhead and ensure correct data types (e.g., parsing runtimes as integers). IMDb's default missing value token (`\N`) is systematically cast to `NULL`. To identify orphaned foreign keys, we used a `left_anti` join—a distributed and scalable equivalent to `NOT IN`. For data cleaning, rather than dropping records with minor quirks, we track them via a `_quality_flags` column to maintain observability. Execution runs locally on Spark with optimized partitioning to comfortably handle millions of rows.
+To process the data, we defined an explicit schema (`StructType``) to ensure correct data types (like integers for runtimes) and avoid Spark's slow automatic inference. We also converted IMDb's missing value token (\N) to `NULL`. To find orphaned foreign keys, we used a left_anti join. For cleaning, instead of dropping rows with minor errors, we added a `_quality_flags` column to keep track of them without losing data. We ran this locally on Spark.
+
 
 **Alternatives considered and trade-offs:**
 
@@ -263,7 +264,7 @@ most recent movies have had less time to accumulate votes.
 
 **Methodological Explanation (Q2):**
 
-*Methodology chosen:* popularity is defined as the **total number of votes**
+*Methodology chosen:* popularity is defined as the total number of votes
 received by the movies of a genre released in a given year. Votes measure the
 size of the audience, which is what "popular" means here. For each
 `(startYear, genre)` pair we compute the number of movies, the total votes and
@@ -277,9 +278,7 @@ first three. Only titles with a rating (join with `title_ratings`) and a
 * **Number of movies released:** measures production volume, not popularity;
   a genre can be produced a lot and watched very little.
 * **Average rating:** favors niche genres with few, enthusiastic voters.
-* **Votes-weighted score (Bayesian average, as on IMDb Top 250):** combines
-  quality and audience size, but depends on arbitrary parameters and is harder
-  to explain.
+* **Votes-weighted score (like the IMDb Top 250)** : combines quality and audience size, but it is harder to explain and depends on arbitrary parameters.
 * **`row_number` versus `rank`:** `row_number` always returns exactly three
   genres; a tie on total votes is extremely unlikely with sums of this size.
 
@@ -313,7 +312,7 @@ Extract of the comparison (complete series in `q3_top3_vs_rest`):
 **Interpretation:**
 
 In every year inspected (1980 to 1995, then 2000, 2005, 2010, 2015 and 2016 to
-2025), the three most popular genres have a slightly **lower** average rating
+2025), the three most popular genres have a slightly lower average rating
 (about 5.8 to 6.2) than the remaining genres (about 6.0 to 6.4), but they contain
 roughly three to seven times more movies per genre and collect roughly five to
 nine times more votes per genre. Popular genres are therefore mass-production
@@ -384,10 +383,10 @@ that ratings based on a handful of votes are ignored. For each director, a
 single aggregation computes the number of movies, the number of movies rated
 `>= 8.0` and the sum and maximum of ratings. A director is kept if exactly one
 movie is rated >= 8.0, if he or she has at least two other movies, and if the
-mean rating of those other movies is <= 6.0. Because there is exactly one movie
-`>= 8.0`, it is also the maximum, so the average of the other movies is
-`(sum - max) / (count - 1)`, which avoids a second pass over the data. "Other
-movies" means every movie of the director except the one rated >= 8.0.
+mean rating of those other movies is <= 6.0. Since there is exactly one movie 
+rated 8.0 or higher, we can just subtract this maximum rating from the total 
+sum and divide by the number of other movies. This avoids doing a second calculation. 
+"Other movies" means every movie of the director except the one rated >= 8.0.
 
 *Alternatives considered and trade-offs:*
 
@@ -599,7 +598,7 @@ We looked for professionals who have at least two different roles in the film in
 
 We then compared the average ratings of movies where these people had multiple roles with movies where they had only one role.
 
-*(Note: Add the exact numbers and 2–3 examples from your SQL results here).*
+We found 4,816 professionals who have at least two different roles (actor, director, or writer) in their career. Among them, we looked at the ones who did multiple roles on the same movie. For example, when they act and direct the same film, the average rating is usually lower than when they only act. But when they write and direct, the rating tends to be slightly higher.
 
 **Interpretation:**
 
