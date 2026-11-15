@@ -462,11 +462,9 @@ unclear.
 
 ### 5.1 Results
 
-Scope: feature films (`movie`, runtime >= 40 min, non-adult) with at least
-1,000 votes (49,434 films). A recurring pair is an actor/actress (top 5
-billed) and a director with at least 3 films together; each of them must
-also have at least 3 films without the other. Rating lift = average rating
-together − average of (actor's rating apart, director's rating apart).
+We took all the films of our database IMDb and we kept only those with at least 40 minutes, no series and no adult films (real cinema films) that had at least 1 000 votes. There 49 434 remaining. 
+For each film, we checked the director and the 5 main actors. We formed "actor+ director" duos who worked together and counted the number of films each duo made together. We kept those with at least 3 common films. 
+We compared the rating of their films together with the rating when they worked separately (the lift).
 
 **Overall:**
 
