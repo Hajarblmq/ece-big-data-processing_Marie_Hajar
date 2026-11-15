@@ -693,7 +693,7 @@ Each answer is written one after the other. If the script stops, it restarts whe
 
 **Alternatives considered and trade-offs:**
 
-- Search for a page by the movie title: it is more simple but many mistakes can occur.
+- Search for a page by the movie title: it is simpler but many mistakes can occur.
 - Classify by ratings instead of classifying by votes
 - The introduction of the article instead of the 'Plot' section for movies
 - Use Spark for the retrieval: the incovenient is that the queries would be sent in parallel by multiple tasks which makes the limits of Wikipedia more difficult to respect.
@@ -768,43 +768,24 @@ Test run on 14 November, 25 minutes with the producer active for 20 minutes for 
 ### 4.2 Methodological Explanation
 
 **Methodology chosen:**
+ We used a Python script to receive in real time the updates coming from all the wikis. It kept only the english Wikipedia. The script sends the updates into Kafka which keeps them until Spark finally reads them. 
+ The IMDb list has been prepared and the first try at 1,6 millions was already serving many false positives. 
+ Spark read Kafka ans cleaned eaxh page and joined it with the list.
+ Each match received a label for reliability. (confirmed, name-only, other_suffix).
+ Spark counted the matches by bunhes of 5 minutes and saved the results and metrics.
 
-We use a pipeline with Wikipedia, a Python producer, Kafka and Spark. Wikipedia sends live updates every time a page is changed. The Python script receives these updates and sends them to Kafka, which stores the messages until Spark is ready to process them. This also prevents data loss if Spark stops or restarts.
-
-We filter the data directly in the Python producer. Out of 35,569 events, only 2,936 came from English Wikipedia (about 8%). This avoids sending unnecessary messages to Kafka. The producer also reconnected automatically twice and continued from the last received message without losing any events.
-
-To identify IMDb pages, we created a list of popular movie titles and well-known people. We clean the titles in the same way on both sides before comparing them. We use a broadcast variable to send this small list to every Spark task, making the comparison faster.
-
-We first monitored 1.6 million people, but this created too many false matches. We reduced the list to 8,092 people by keeping only the first four people in the credits (actors, directors and writers) of popular films with at least 50,000 votes. We also removed names shared by several people. For movie titles, we kept only titles with at least 5,000 votes, giving us 22,536 titles.
-
-Finally, we use three labels to show how reliable each match is: confirmed for clear film or series matches, name_only when only the name matches, and other_suffix when the page has another description. This helps us identify possible false matches without deleting any results.
 
 **Late data handling:**
-
-We use event time instead of arrival time. Event time is when a Wikipedia page is changed, while arrival time is when the message reaches Kafka and Spark. These times can be different because of network delays or reconnections.
-
-If we use arrival time, late messages may be counted in the wrong five-minute period. To avoid this, we use a watermark of two minutes. This means Spark waits two extra minutes before closing a time period.
-
-For example, the period from 09:00 to 09:05 is closed when Spark receives an event with a timestamp of 09:07 or later. Any message from this period arriving after it is closed is ignored.
-
-We chose two minutes because we measured the real delays: the average was 3 seconds and the maximum was 12 seconds. Two minutes is ten times longer than the maximum delay observed, providing a safe margin. During the test, no events were lost due to the watermark (zero dropped rows).
-
-The last time periods in our results were not closed because the stream stopped before Spark received an event late enough to close them. This explains why the counts stop at 09:10–09:15, even though matches exist until 09:21.
-
-The watermark also helps control memory usage. Without it, Spark would have to keep all time periods open forever.
+- We chose the right time: counted according to the update time on wikipedia, not the arrival time in Spark.
+- We assigned a delay (a watermark of 2 minutes)
+- We ignored the latest  delays
+- The last bunches have not been written because the streaming stopped before the closure.
 
 **Alternatives considered and trade-offs:**
 
-- Filtering in Spark instead of Python: This would send 12 times more messages to Kafka. However, we could keep all languages for other analyses.
-
-- Using Wikidata: This would provide exact matches, but requires one request for every Wikipedia update. This is too slow for real-time processing and could exceed Wikidata's limits.
-
-- Using approximate matching: This would find more results, including titles with spelling mistakes, but would also create more false matches.
-
-- Using a shorter watermark (15 seconds): Results would be available faster, but more late messages could be lost.
-
-- Using a longer watermark (10 minutes): This would be safer, but results would arrive later and Spark would need more memory.
-
+- Filtering in Spark instead of Python: This would send  more messages to Kafka but we could keep all languages for other analyses.
+- Using Wikidata: This would provide exact matches but it requires one request for every Wikipedia update.
+- Using approximate matching: This would find more results, including titles with spelling mistakes but would also create more false matches.
+- Using a shorter watermark: the results would be available faster, but more late messages could be lost.
+- Using a longer watermark: This would be safer, but results would arrive later and Spark would need more memory.
 - Using no watermark: No late messages would be ignored, but memory usage would grow continuously. We also could not use append mode to write final results.
-
-- Counting by arrival time: This would be simpler and would not require a watermark, but late messages would be counted in the wrong time period.
