@@ -631,7 +631,7 @@ We could have focused only on people who are both actors and directors. However,
 
 ### 3.1 Results
 
-We took the feature-length films released between 1980 and 2025. For each year and each genre, we kept 10 films with the highest number of votes. For each film, we took the first 3 credited people. We searched for their Wikipedia page. For the films, we kept  the plot summary (the “Plot” section of the article) and for the persons, the introduction to the article.
+We took the feature-length films released between 1980 and 2025. For each year and each genre, we kept 10 films with the highest number of votes. For each film, we took the first 3 credited people. We searched for their Wikipedia page. For the films, we kept the plot summary (the 'Plot' section of the article) and for the people, the introduction to the article.
 
 **Selection:**
 
@@ -675,13 +675,36 @@ We took the feature-length films released between 1980 and 2025. For each year a
 
 Full tables: `projet/output/enrichment/`.
 
+### 3.2 Methodological Explanation
+
+**Methodology chosen:**
+
+The source we used is Wikipedia in english because it is open source and the text is reusable. The problem was, if we looked for "Titanic" for example on Wikipedia, the ouput was either the boat or the 1953 movie but not the 1997 movie.
+Since Wikidata is a huge database linked to Wikipedia, where every movie et every person has an information sheet with the IMDb ID on it and the link to the Wikipedia page, we simply give the ID, and the Wikidata gives us the right page without any possible mistake. We did that in batches of 200 IDs per query, resulting in 82 queries for 17 000 IDs.
+For each movie,we collect the 'Plot' section of the article and for each person, we collect the introduction of the article which provides a summary of that person (birth date, job, well-known works).
+
+The Data gathering was done out of Spark. Searching for pages on the internet means waiting for des answers one by one,and respecting the breaks. Spark is used to compute quickly on a huge volume of data, not to wait. Hence, a simple Python script is more suitable.
+
+We also respected the Wikipedia and Wikidata rules: one query at the time with a break of 0,25 s for Wikipedia and 5 s for Wikidata (which is more strict). Each query identifies us and when the server responds 429 the script waits for the suitable time (120 s) instead of insisting. It arrived 3 times with Wikidata.
+
+Each line keeps the source_url,which is the link to the exact version of the page we read. If the article changes, we can still find what we read.
+
+Each answer is written one after the other. If the script stops, it restarts where it ended without asking for the same pages again. For millions of films it is very important.
+
+**Alternatives considered and trade-offs:**
+
+- Search for a page by the movie title: it is more simple but many mistakes can occur.
+- Classify by ratings instead of classifying by votes
+- The introduction of the article instead of the 'Plot' section for movies
+- Use Spark for the retrieval: the incovenient is that the queries would be sent in parallel by multiple tasks which makes the limits of Wikipedia more difficult to respect.
+
 ---
+
 ## 4. Streaming Data Processing
 
 ### 4.1 Results
 
-Test run, 25 minutes with the producer active for 20 minutes for English Wikipedia only.
-
+Test run on 14 November, 25 minutes with the producer active for 20 minutes for English Wikipedia only.
 
 **Lookup table (watched IMDb names):**
 
@@ -741,3 +764,47 @@ Test run, 25 minutes with the producer active for 20 minutes for English Wikiped
 | delay, maximum | 12 s |
 | watermark | 2 minutes |
 | rows dropped by the watermark | 0 |
+
+### 4.2 Methodological Explanation
+
+**Methodology chosen:**
+
+We use a pipeline with Wikipedia, a Python producer, Kafka and Spark. Wikipedia sends live updates every time a page is changed. The Python script receives these updates and sends them to Kafka, which stores the messages until Spark is ready to process them. This also prevents data loss if Spark stops or restarts.
+
+We filter the data directly in the Python producer. Out of 35,569 events, only 2,936 came from English Wikipedia (about 8%). This avoids sending unnecessary messages to Kafka. The producer also reconnected automatically twice and continued from the last received message without losing any events.
+
+To identify IMDb pages, we created a list of popular movie titles and well-known people. We clean the titles in the same way on both sides before comparing them. We use a broadcast variable to send this small list to every Spark task, making the comparison faster.
+
+We first monitored 1.6 million people, but this created too many false matches. We reduced the list to 8,092 people by keeping only the first four people in the credits (actors, directors and writers) of popular films with at least 50,000 votes. We also removed names shared by several people. For movie titles, we kept only titles with at least 5,000 votes, giving us 22,536 titles.
+
+Finally, we use three labels to show how reliable each match is: confirmed for clear film or series matches, name_only when only the name matches, and other_suffix when the page has another description. This helps us identify possible false matches without deleting any results.
+
+**Late data handling:**
+
+We use event time instead of arrival time. Event time is when a Wikipedia page is changed, while arrival time is when the message reaches Kafka and Spark. These times can be different because of network delays or reconnections.
+
+If we use arrival time, late messages may be counted in the wrong five-minute period. To avoid this, we use a watermark of two minutes. This means Spark waits two extra minutes before closing a time period.
+
+For example, the period from 09:00 to 09:05 is closed when Spark receives an event with a timestamp of 09:07 or later. Any message from this period arriving after it is closed is ignored.
+
+We chose two minutes because we measured the real delays: the average was 3 seconds and the maximum was 12 seconds. Two minutes is ten times longer than the maximum delay observed, providing a safe margin. During the test, no events were lost due to the watermark (zero dropped rows).
+
+The last time periods in our results were not closed because the stream stopped before Spark received an event late enough to close them. This explains why the counts stop at 09:10–09:15, even though matches exist until 09:21.
+
+The watermark also helps control memory usage. Without it, Spark would have to keep all time periods open forever.
+
+**Alternatives considered and trade-offs:**
+
+- Filtering in Spark instead of Python: This would send 12 times more messages to Kafka. However, we could keep all languages for other analyses.
+
+- Using Wikidata: This would provide exact matches, but requires one request for every Wikipedia update. This is too slow for real-time processing and could exceed Wikidata's limits.
+
+- Using approximate matching: This would find more results, including titles with spelling mistakes, but would also create more false matches.
+
+- Using a shorter watermark (15 seconds): Results would be available faster, but more late messages could be lost.
+
+- Using a longer watermark (10 minutes): This would be safer, but results would arrive later and Spark would need more memory.
+
+- Using no watermark: No late messages would be ignored, but memory usage would grow continuously. We also could not use append mode to write final results.
+
+- Counting by arrival time: This would be simpler and would not require a watermark, but late messages would be counted in the wrong time period.
