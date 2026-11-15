@@ -559,3 +559,64 @@ the actors with at least two, then at least three languages.
 * Lower thresholds (rating 6.5, 1 000 votes): we would find more actors, but
   the successes would be less convincing. With 7.0 and 10 000 votes the lists
   are short but meaningful.
+### 2.7 Actors with 20+ years career and early peak (Q7)
+
+**Results:**
+
+We found 7,275 actors who have appeared in at least 15 movies and had a career lasting 20 years or more. Their average rating during the first half of their career is higher than during the second half.
+
+Here are three examples:
+
+| Actor | First year | Last year | Nb movies | Avg early | Avg late |
+| --- | --- | --- | --- | --- | --- |
+| Brahmanandam | 1987 | 2025 | 531 | 6.52 | 5.55 |
+| Mammootty | 1980 | 2026 | 370 | 7.01 | 6.02 |
+| Mohanlal | 1978 | 2026 | 352 | 6.94 | 5.97 |
+
+**Interpretation:**
+
+Most of the actors in the results are Indian actors who have had very long careers. We can see that their movies generally received better ratings during the first part of their careers than during the second part.
+
+To make this comparison, we divided each actor's movies into two equal parts based on the number of movies, and then calculated the average rating for each part.
+
+**Methodological Explanation (Q7):**
+
+First, we joined `title.principals` with `title.basics` and `title.ratings`. We only kept people who worked as actors or actresses (`category = 'actor'` or `'actress'`) and who had an `ordering` value of 5 or less.
+
+We also kept only movies and selected actors who appeared in at least 15 movies and had a career of at least 20 years.
+
+After that, we ordered their movies by release year and divided them into two halves. Finally, we calculated the average rating for each half and kept only the actors whose first-half average was higher than their second-half average.
+
+**Alternatives considered:**
+
+Another possibility would have been to divide careers based on years, for example comparing the first 10 years with the next 10 years. However, we decided to split movies by quantity because some actors make many movies in a short period, while others have longer breaks between projects. This makes the comparison more balanced.
+
+### 2.8 Multi-talented professionals (Q8)
+
+**Results:**
+
+We looked for professionals who have at least two different roles in the film industry, among actor, director and writer.
+
+We then compared the average ratings of movies where these people had multiple roles with movies where they had only one role.
+
+*(Note: Add the exact numbers and 2–3 examples from your SQL results here).*
+
+**Interpretation:**
+
+This analysis helps us understand whether having several roles in the same movie has an impact on its rating.
+
+For example, some people work as both actors and directors, or as actors and writers. We wanted to see if movies where they have multiple responsibilities receive better or worse ratings than movies where they only have one role.
+
+**Methodological Explanation (Q8):**
+
+First, we used the `title.crew` table to get the directors and writers of each movie. We separated these roles so that each person could be linked to their corresponding role.
+
+We also used `title.principals` to get the actors. Then, we grouped the data by person and movie to count how many different roles each person had in the same movie.
+
+If a person had at least two roles in one movie, we classified it as a multi-role movie. Otherwise, it was classified as a single-role movie.
+
+Finally, we joined this information with `title.ratings` to calculate and compare the average ratings of both groups.
+
+**Alternatives considered:**
+
+We could have focused only on people who are both actors and directors. However, we decided to include writers as well because it gives us a broader view of people who work in different areas of filmmaking.
