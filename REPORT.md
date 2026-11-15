@@ -382,10 +382,10 @@ inflates the count slightly; and the result depends on the vote threshold.
 movies (`titleType = 'movie'`) having a rating and **at least 1 000 votes**, so
 that ratings based on a handful of votes are ignored. For each director, a
 single aggregation computes the number of movies, the number of movies rated
->= 8.0 and the sum and maximum of ratings. A director is kept if exactly one
+`>= 8.0` and the sum and maximum of ratings. A director is kept if exactly one
 movie is rated >= 8.0, if he or she has at least two other movies, and if the
 mean rating of those other movies is <= 6.0. Because there is exactly one movie
->= 8.0, it is also the maximum, so the average of the other movies is
+`>= 8.0`, it is also the maximum, so the average of the other movies is
 `(sum - max) / (count - 1)`, which avoids a second pass over the data. "Other
 movies" means every movie of the director except the one rated >= 8.0.
 
@@ -454,3 +454,108 @@ question says "three seasons consisting of >=10 episodes", so we kept the
 per-season threshold. Finally we did not keep episodes without a rating: it
 makes the computation more complex and the definition of best/worst becomes
 unclear.
+
+### 2.6 Actors with success in movies of several original languages (Q6)
+
+**Results:**
+
+We define a successful movie as a movie rated at least 7.0 with at least
+10 000 votes. 4 963 movies meet this criterion, and we could infer an original
+language for 4 400 of them (89%). The 15 most frequent languages are:
+
+| language | movies |
+| --- | --- |
+| en | 3 810 |
+| fr | 205 |
+| es | 100 |
+| it | 61 |
+| de | 57 |
+| sv | 33 |
+| ko | 21 |
+| da | 18 |
+| tr | 16 |
+| fa | 14 |
+| ja | 13 |
+| pt | 12 |
+| nl | 8 |
+| pl | 7 |
+| no | 6 |
+
+We find 433 actors and actresses with a leading role in successful movies of
+at least 2 distinct original languages, and 39 of them reach at least 3
+languages. The table below is an extract, sorted by number of languages and
+then by number of successful movies (the complete lists are in
+`q6_multilingual_2plus_languages` and `q6_multilingual_3plus_languages`):
+
+| actor | languages | successful movies |
+| --- | --- | --- |
+| Gérard Depardieu | en, es, fr, it | 6 |
+| Penélope Cruz | en, es, it | 10 |
+| Diane Kruger | de, en, fr | 9 |
+| Gael García Bernal | en, es, fr | 9 |
+| Jean Reno | en, fr, it | 5 |
+| Alain Delon | en, fr, it | 6 |
+| Jeanne Moreau | en, es, fr | 7 |
+| Song Kang-ho | en, es, ko | 6 |
+
+**Interpretation:**
+
+Most of the people we find are European or Latin American actors who worked in
+their own language and in English, French, Italian or Spanish productions, for
+example Diane Kruger in German, English and French. The maximum is five
+languages and only 39 people reach three, so success in three languages is
+rare: it requires leading roles in successful movies from three different
+language markets.
+
+Limits. IMDb has no original-language column, so we had to infer it, and the
+result is biased in two ways.
+
+* English represents 87% of the movies with a known language, which is
+  probably more than in reality: a foreign movie whose title is kept unchanged
+  in the United States or the United Kingdom can be counted as English.
+* Languages written in non-Latin scripts are under-represented. The original
+  title of a Japanese or Turkish film is often romanized, so it is identical
+  to the aliases used in Germany, France or Italy, and the vote picks those
+  languages. Toshirō Mifune illustrates it: he appears with de, en, fr, it and
+  nl but with no Japanese, although his films are Japanese. Japanese has only
+  13 movies, and Hindi and Chinese do not appear at all because we left the
+  ambiguous regions out.
+
+The list is therefore reliable for languages written in the Latin alphabet,
+and it should be read as a lower bound for the others.
+
+**Methodological Explanation (Q6):**
+
+*Methodology chosen:* we define a successful movie as a `movie` rated at least
+7.0 with at least 10 000 votes: the rating measures quality and the number of
+votes makes sure it is not the opinion of a few enthusiastic viewers. An actor
+counts for a movie only with a leading role (`category` actor or actress and
+`ordering <= 5` in `title.principals`), so that a cameo does not count as a
+success in a language.
+
+The original language of a movie is not available in IMDb, so we infer it from
+`title.akas`, restricted to the successful movies. First, if the row marked
+`isOriginalTitle = 1` has a language, or a region that we can map to a
+language, we use it; this is rare because these rows are almost always empty.
+Second, we look at the aliases whose title is identical to the original title.
+Each of them has a language, or a region mapped to a language (a small table
+of unambiguous regions), and the language shared by the largest number of
+distinct regions wins. We discard ties as ambiguous. Finally, for each actor
+we count the distinct languages of his or her successful movies, and we keep
+the actors with at least two, then at least three languages.
+
+*Alternatives considered and trade-offs:*
+
+* Original-title row only (`isOriginalTitle = 1`): this is the cleanest
+  signal, but these rows have almost no language and no region. Our first
+  version with this rule found a language for 0 movies out of 4 963.
+* First alias identical to the original title: this gives a high coverage, but
+  the choice is arbitrary because a title is kept in many countries. Our
+  attempt with this rule gave actors with up to 11 original languages (Tom
+  Hanks), which is absurd. The majority vote is more stable.
+* External source (Wikipedia or Wikidata original language): much more
+  accurate, in particular for non-Latin languages, but it needs network access
+  and a step to match titles. It could be done in the Enrichment part.
+* Lower thresholds (rating 6.5, 1 000 votes): we would find more actors, but
+  the successes would be less convincing. With 7.0 and 10 000 votes the lists
+  are short but meaningful.
