@@ -685,3 +685,53 @@ Finally, we joined this information with `title.ratings` to calculate and compar
 **Alternatives considered:**
 
 We could have focused only on people who are both actors and directors. However, we decided to include writers as well because it gives us a broader view of people who work in different areas of filmmaking.
+
+---
+
+## 3. Data Enrichment
+
+### 3.1 Results
+
+We took the feature-length films released between 1980 and 2025. For each year and each genre, we kept 10 films with the highest number of votes. For each film, we took the first 3 credited people. We searched for their Wikipedia page. For the films, we kept  the plot summary (the “Plot” section of the article) and for the persons, the introduction to the article.
+
+**Selection:**
+
+| item | count |
+| --- | --- |
+| (year, genre, film) slots | 9,832 |
+| distinct films | 6,821 |
+| (film, principal) pairs | 20,446 |
+| distinct people | 10,148 |
+
+**Gathering:**
+
+| step | requests | duration |
+| --- | --- | --- |
+| Wikidata SPARQL (IMDb ID → article), batches of 200 IDs | 82 (+ a first interrupted run) | ~9 min |
+| Wikipedia API, films (full article, 1 per request) and people (introduction, 20 per request) | 6,709 | 41 min |
+| HTTP 429 responses from Wikidata (waited `Retry-After`) | 3 | |
+
+**Coverage:**
+
+| entity | total | with Wikipedia page | enriched | enriched (%) |
+| --- | --- | --- | --- | --- |
+| film (synopsis) | 6,821 | 6,330 | 5,972 | 87.6 |
+| person (biography) | 10,148 | 7,625 | 7,624 | 75.1 |
+
+**Reasons for missing information (`enrichment_note`):**
+
+| note | films | people |
+| --- | --- | --- |
+| Wikipedia article has no Plot/Synopsis section | 358 | – |
+| No English Wikipedia article for this Wikidata item | 248 | 822 |
+| No Wikidata item carries this IMDb ID | 243 | 1,701 |
+| Wikipedia article has an empty introduction | – | 1 |
+
+**Example of enriched rows:**
+
+| year | genre | film | synopsis (start) | source_url |
+| --- | --- | --- | --- | --- |
+| 1987 | War | The Commissar | Around 1920 or 1921, a female commissar of the Red Army cavalry… | https://en.wikipedia.org/w/index.php?title=Commissar_%28film%29&oldid=1366476175 |
+| 1980 | Music | The Apple | In a cut two-song prologue of the film named "Paradise Day"… | https://en.wikipedia.org/w/index.php?title=The_Apple_%281980_film%29&oldid=1381028617 |
+
+Full tables: `projet/output/enrichment/`.
