@@ -454,3 +454,62 @@ question says "three seasons consisting of >=10 episodes", so we kept the
 per-season threshold. Finally we did not keep episodes without a rating: it
 makes the computation more complex and the definition of best/worst becomes
 unclear.
+
+
+---
+
+## 5. Open Question
+
+### 5.1 Results
+
+Scope: feature films (`movie`, runtime >= 40 min, non-adult) with at least
+1,000 votes (49,434 films). A recurring pair is an actor/actress (top 5
+billed) and a director with at least 3 films together; each of them must
+also have at least 3 films without the other. Rating lift = average rating
+together − average of (actor's rating apart, director's rating apart).
+
+**Overall:**
+
+| pairs | avg rating lift | median rating lift | pairs better together (%) | median votes ratio (together / apart) |
+| --- | --- | --- | --- | --- |
+| 2,084 | +0.219 | +0.243 | 67.9 | 0.88 |
+
+**By number of collaborations:**
+
+| films together | pairs | avg rating lift | median rating lift | pairs better together (%) | median votes ratio |
+| --- | --- | --- | --- | --- | --- |
+| 3 | 1,252 | +0.221 | +0.248 | 66.6 | 0.88 |
+| 4–5 | 628 | +0.211 | +0.228 | 69.7 | 0.86 |
+| 6+ | 204 | +0.233 | +0.246 | 70.1 | 0.89 |
+
+**Most frequent pairs (extract):**
+
+| actor | director | films together | years | rating together | actor apart | director apart | lift |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Kemal Sunal | Kartal Tibet | 26 | 1976–1990 | 6.91 | 7.37 | 5.40 | +0.52 |
+| Sidney James | Gerald Thomas | 21 | 1960–1974 | 6.27 | 6.80 | 5.45 | +0.14 |
+| Toshirō Mifune | Akira Kurosawa | 16 | 1948–1965 | 7.81 | 7.25 | 7.24 | +0.57 |
+| Mohanlal | Priyadarshan | 15 | 1985–2021 | 7.51 | 6.88 | 6.62 | +0.77 |
+| John Wayne | John Ford | 14 | 1939–1963 | 7.25 | 6.32 | 6.89 | +0.64 |
+| Chishū Ryū | Yasujirō Ozu | 13 | 1930–1962 | 7.66 | 8.00 | 7.48 | −0.08 |
+| Christian De Sica | Neri Parenti | 12 | 1985–2008 | 4.40 | 5.28 | 6.02 | −1.25 |
+
+**Largest positive lift (extract):**
+
+| actor | director | films together | rating together | actor apart | director apart | lift |
+| --- | --- | --- | --- | --- | --- | --- |
+| Diane Keaton | Francis Ford Coppola | 3 | 8.57 | 6.15 | 6.40 | +2.29 |
+| Elijah Wood | Peter Jackson | 3 | 8.90 | 6.16 | 7.38 | +2.13 |
+| Al Pacino | Francis Ford Coppola | 3 | 8.57 | 6.53 | 6.40 | +2.10 |
+| Michael Madsen | Quentin Tarantino | 3 | 8.13 | 4.79 | 7.64 | +1.92 |
+
+**Largest negative lift (extract):**
+
+| actor | director | films together | rating together | actor apart | director apart | lift |
+| --- | --- | --- | --- | --- | --- | --- |
+| Altan Erkekli | Doga Can Anafarta | 3 | 2.27 | 6.61 | 4.57 | −3.32 |
+| Salman Khan | Prabhu Deva | 3 | 3.80 | 5.53 | 5.59 | −1.76 |
+| Morgan Freeman | George Gallo | 3 | 4.53 | 6.54 | 5.99 | −1.73 |
+| Bruce Willis | Matt Eskandari | 4 | 3.70 | 5.57 | 5.13 | −1.65 |
+
+The full tables are in `projet/output/open_question/`.
